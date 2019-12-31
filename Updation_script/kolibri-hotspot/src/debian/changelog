@@ -1,0 +1,11 @@
+kolibri-hotspot (0.2) saucy; urgency=medium
+
+  * Added delay before starting hotspot to ensure interface is initialized.
+
+ -- Jamie Alexandre <jamie@learningequality.org>  Thu, 14 Aug 2014 18:16:17 -0700
+
+kolibri-hotspot (0.1) saucy; urgency=low
+
+  * Initial release.
+
+ -- Jamie Alexandre <jamie@learningequality.org>  Thu, 20 Mar 2014 17:39:16 -0700

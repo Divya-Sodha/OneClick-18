@@ -1,0 +1,4 @@
+[Desktop Entry]
+Type=Application
+Exec=sudo service kolibri-hotspot stop
+Terminal=false

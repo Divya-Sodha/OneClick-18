@@ -1,0 +1,11 @@
+1. Copy Updation_script folder on Desktop.
+2. Click on Files and select Edit tab.
+3. Select preferences and click on Behaviour tab.
+4. Select option "Run executable text files when they are opened" and close.
+5. Go to the Updation_script folder.
+6. Right click on requirements.sh and select Properties.
+7. Click on Permissions tab and select "Allow  executing file as program" and close.
+8. Connect to the internet and double click on requirements.sh file.
+9. Right click on setup_dashboard.sh and select Properties.
+10. Click on Permissions tab and select "Allow  executing file as program" and close.
+11. To open Setup setup dashboard, double click on setup_dashboard.sh file.

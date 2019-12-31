@@ -1,0 +1,13 @@
+Package: kolibri-hotspot
+Version: 0.2
+Architecture: all
+Maintainer: Jamie Alexandre <jamie@learningequality.org>
+Installed-Size: 47
+Depends: hostapd, dnsmasq, python, iw
+Section: gnome
+Priority: extra
+Homepage: https://learningequality.org/
+Description: Hotspot for KA Lite
+ .
+ A script to create an infrastructure WiFi hotspot (access point mode) in
+ Ubuntu, for accessing KA Lite, using dnsmasq to direct all traffic to KA Lite.

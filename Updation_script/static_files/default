@@ -1,0 +1,80 @@
+ 
+
+upstream kolibri {
+    server 127.0.0.1:8080;
+}
+
+log_format timed_combined '$remote_addr - $remote_user [$time_local] '
+    '"$request" $status $body_bytes_sent '
+    '"$http_referer" "$http_user_agent" '
+    '$request_time $upstream_response_time $pipe $upstream_cache_status v1';
+access_log /var/log/nginx/timing.log timed_combined;
+
+proxy_cache_path /home/kolibri/.kolibri/nginxcache levels=1:2 keys_zone=my_cache:10m max_size=10g inactive=240h use_temp_path=off;
+
+server {
+
+    listen 8008;
+
+    location /static {
+        alias   /home/kolibri/.kolibri/static;
+        expires 365d;
+        add_header Cache-Control "public";
+    }
+
+    location /content {
+        alias   /home/kolibri/.kolibri/content;
+        expires 365d;
+        add_header Cache-Control "public";
+    }
+
+    location /favicon.ico {
+        empty_gif;
+        expires 365d;
+        add_header Cache-Control "public";
+    }
+
+    proxy_set_header Host $http_host;
+    proxy_set_header X-Scheme $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_cache my_cache;
+
+    location /zipcontent {
+        proxy_pass http://kolibri;
+        proxy_hide_header Content-Security-Policy;
+        proxy_ignore_headers X-Accel-Expires Expires Cache-Control Vary;
+        proxy_cache_valid any 240h;
+        expires 365d;
+        add_header Content-Security-Policy "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: http://${http_host}";
+        add_header X-Proxy-Cache $upstream_cache_status;
+    }
+
+    location /downloadcontent {
+        proxy_pass http://kolibri;
+        proxy_ignore_headers X-Accel-Expires Expires Cache-Control Vary;
+        proxy_cache_valid any 240h;
+        expires 365d;
+        add_header X-Proxy-Cache $upstream_cache_status;
+    }
+
+    location / {
+        proxy_pass http://kolibri;
+        add_header X-Proxy-Cache $upstream_cache_status;
+        proxy_ignore_headers Vary;
+        error_page 502 = @502;
+    }
+
+    location @502 {
+        types { }
+        default_type "text/html";
+        return 502 "
+        <BR>
+        <H1>Kolibri might be busy - wait a few moments and then reload this page
+        <BR><BR>
+        <H2>If kolibri is still busy, get help from the system administrator
+        <H3>Error code: nginx 502 Bad Gateway (maybe the kolibri webserver is not working correctly)";
+    }
+
+}

@@ -1,0 +1,19 @@
+Source: kolibri-hotspot
+Section: gnome
+Priority: extra
+Maintainer: Jamie Alexandre <jamie@learningequality.org>
+Build-Depends: 	debhelper (>= 9)
+Standards-Version: 4.0
+Homepage: https://learningequality.org/
+
+Package: kolibri-hotspot
+Architecture: all
+Depends: hostapd,
+		 dnsmasq,
+		 python,
+		 iw,
+		 ${misc:Depends}
+Description: Hotspot for kolibri
+ .
+ A script to create an infrastructure WiFi hotspot (access point mode) in
+ Ubuntu, for accessing KA Lite, using dnsmasq to direct all traffic to KA Lite.

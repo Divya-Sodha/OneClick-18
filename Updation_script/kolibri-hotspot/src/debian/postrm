@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -e
+
+case "$1" in
+	purge)
+		rm -Rf "/etc/hostapd-hotspot.conf"
+		sed -i "s/# Bind to only one interface//g" /etc/dnsmasq.conf
+		sed -i "s/bind-interfaces//g" /etc/dnsmasq.conf
+		sed -i "s/# Choose interface for binding//g" /etc/dnsmasq.conf
+		sed -i "s/^interface=.*//g" /etc/dnsmasq.conf
+		sed -i "s/# Specify range of IP addresses for DHCP leasses//g" /etc/dnsmasq.conf
+		sed -i "s/dhcp-range=192.168.150.2.*//g" /etc/dnsmasq.conf
+		sed -i "s/#INTERFACE_NET=.*//g" /etc/dnsmasq.conf
+	;;
+esac
+
+#DEBHELPER#
+
+exit 0
+
+# vim: ts=2 sw=2

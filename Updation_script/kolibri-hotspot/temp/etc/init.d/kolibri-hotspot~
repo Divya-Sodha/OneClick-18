@@ -1,0 +1,341 @@
+#!/bin/bash
+
+# Script to set up a WiFi Hotspot in Ubuntu for Kolibri.
+#
+# Copyright (C) 2014  Foundation for Learning Equality <info@learningequality.org>
+#
+# Adapted from the "ap-hotspot-0.3" script by:
+# Copyright (C) 2013  Alin Andrei <andrew@webupd8.org>
+# Copyright (C) 2013  Satyajit sahoo
+#
+# This script is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published
+# by the Free Software Foundation; either version 3 of the License,
+# or (at your option) any later version.
+#
+# The script is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this script. If not, see <http://www.gnu.org/licenses/>.
+
+export DISPLAY=":0.0"
+
+# Global variables
+logfile="/tmp/hostapd.log"
+pidfile="/var/run/Kolibri-hotspot.pid"
+ifacefile="/tmp/interface.name"
+hotspotconfig="/etc/hostapd-hotspot.conf"
+dnsmasqconfig="/etc/dnsmasq.conf"
+user=$(who | grep $(echo "$DISPLAY" | cut -d '.' -f 1) | cut -d ' ' -f 1 | tail -1)
+ssid="Kolibri"
+subnet="1.1.1"
+
+# If we were unable to determine the user, just use the first user listed
+if [[ ! $user ]]; then
+	user=$(ls /home | head -n 1)
+fi
+
+
+show_msg() {
+echo -e "$@"
+}
+
+
+show_info() {
+echo -e "\033[1;34m$@\033[0m"
+}
+
+
+show_warn() {
+echo -e "\033[1;33m$@\033[0m"
+}
+
+
+show_err() {
+echo -e "\033[1;31m$@\033[0m" 1>&2
+}
+
+
+show_debug() {
+while read input; do
+	[[ "$debug" == "true" ]] && echo -e "$input"
+done
+}
+
+
+show_notify() {
+sudo killall notify-osd 2> /dev/null
+sudo -u "$user" notify-send -i "network-wireless" "$@"
+}
+
+
+check_root() {
+# Check if user is root
+if [[ ! $(whoami) = "root" ]]; then
+	show_err "Please run the script as root"
+	exit 1
+fi
+}
+
+
+check_supported() {
+# Check if the wireless card supports Access Point mode. This script won't work if it doesn't support it
+if [[ ! $(iw list 2>&1 | grep -A6 "Supported interface modes" | grep AP$) ]]; then
+	show_err "Your wireless card does not support Access Point mode"
+	exit 1
+fi
+}
+
+
+check_network() {
+# Check if Wireless is disabled
+if [[ $(iwconfig "$INTERFACE_WLAN" 2>&1 | grep "Tx-Power=off") ]]; then
+	show_err "WiFi is disabled, please enable WiFi before running this script"
+	exit 1
+# Check if Wireless is enabled, but connected to a network
+elif [[ ! $(iwconfig "$INTERFACE_WLAN" 2>&1 | grep "ESSID:off/any") && $(iwconfig "$INTERFACE_WLAN" 2>&1 | grep "ESSID:") ]]; then
+	show_err "Please disconnect WiFi before proceeding"
+	exit 1
+fi
+# ensure that the adapter has been brought up
+ifconfig "$INTERFACE_WLAN" up 2>&1 | show_debug
+}
+
+
+check_connected() {
+# Monitor logfile for connected devices
+lines_con="0"
+lines_dis="0"
+while [[ -f "$logfile" ]]; do
+	if [[ "$lines_con" < $(grep -c "AP-STA-CONNECTED" "$logfile") ]]; then
+		show_notify "New device connected to Hotspot" && show_info "New device connected to Hotspot"
+		(( lines_con++ ))
+	elif [[ "$lines_dis" < $(grep -c "AP-STA-DISCONNECTED" "$logfile") ]]; then
+		show_notify "Device disconnected from Hotspot" && show_info "Device disconnected from Hotspot"
+		(( lines_dis++ ))
+	fi
+	sleep 5
+done
+}
+
+
+configure() {
+
+# Reset config
+rm -f "$hotspotconfig"
+sed -i "s/# Bind to only one interface//g" "$dnsmasqconfig"
+sed -i "s/bind-interfaces//g" "$dnsmasqconfig"
+sed -i "s/# Choose interface for binding//g" "$dnsmasqconfig"
+sed -i "s/^interface=.*//g" "$dnsmasqconfig"
+sed -i "s/# Specify range of IP addresses for DHCP leasses//g" "$dnsmasqconfig"
+sed -i "s/dhcp-range=$subnet.2.*//g" "$dnsmasqconfig"
+cat -s "$dnsmasqconfig" | tee "$dnsmasqconfig" > /dev/null 2>&1
+
+INTERFACE_WLAN=$(iwconfig 2>&1 | grep "^wl" | sed -e 's/ .*//g' | tail -n 1)
+
+# If we still haven't found any candidate interfaces, bail
+if [[ ! $INTERFACE_WLAN ]]; then
+	show_msg "Could not find any wireless devices."
+	exit 1
+fi
+
+# Write the hostapd config file
+cat <<EOF | tee "$hotspotconfig" > /dev/null 2>&1
+# WiFi Hotspot
+interface=$INTERFACE_WLAN
+driver=nl80211
+#Access Point
+ssid=$ssid
+hw_mode=g
+# WiFi Channel:
+channel=1
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+EOF
+
+# Add the required bits to the dnsmasq config file
+if [[ ! $(grep "Bind to only one interface" "$dnsmasqconfig") ]]; then
+cat <<EOF | tee "$dnsmasqconfig" > /dev/null 2>&1
+# Bind to only one interface
+bind-interfaces
+# Choose interface for binding
+interface=$INTERFACE_WLAN
+# Resolve all incoming DNS requests to our own IP
+address=/#/$subnet.1
+# Don't require fully qualified domain names
+expand-hosts
+# Set the local domain to "Kolibri"
+domain=Kolibri
+# Set the DNS server to listen on the wifi dongle's IP
+listen-address=$subnet.1
+# Specify range of IP addresses for DHCP leasses
+dhcp-range=$subnet.2,$subnet.200,3h
+EOF
+fi
+}
+
+
+start() {
+
+# Sleep, to ensure the network interface is fully initialized before we start
+sleep 5
+
+# Check previous process
+if [[ -f "$pidfile" ]]; then
+	show_warn "Another process is already running; stopping it first"
+	stop
+fi
+
+# Catch attempts to kill us, and die gracefully after stopping
+trap "stop; exit" SIGHUP SIGINT SIGTERM
+
+service network-manager stop 2>&1 | show_debug
+
+# Run the configure script to get device info, setup the config files, etc
+configure
+
+# Check supported
+check_supported
+
+# Check network
+check_network
+
+# Write the PID to a file
+echo "$$" > "$pidfile"
+show_info "Starting Kolibri Hotspot..."
+
+# Write the adapter being used to a file
+echo "$INTERFACE_WLAN" > "$ifacefile"
+
+# Set up the services
+service hostapd stop 2>&1 | show_debug
+service dnsmasq stop 2>&1 | show_debug
+update-rc.d hostapd disable 2>&1 | show_debug
+update-rc.d dnsmasq disable 2>&1 | show_debug
+
+# Configure IP address for WLAN
+ifconfig "$INTERFACE_WLAN" $subnet.1 2>&1 | show_debug
+
+# Backup resolve.conf file
+cp /etc/resolv.conf /etc/resolv.conf.backup 2>&1 | show_debug
+
+# Start DHCP/DNS server
+service dnsmasq restart 2>&1 | show_debug
+
+# Restore resolve.conf file
+mv /etc/resolv.conf.backup /etc/resolv.conf 2>&1 | show_debug
+
+# Run access point daemon
+if [[ $(hostapd --help 2>&1 | grep "\-f") ]]; then
+	rm -f "$logfile"
+	touch "$logfile"
+	hostapd -B "$hotspotconfig" -f "$logfile" -d -t
+	while :
+	do
+		[[ $(grep "Using interface" "$logfile") ]] && show_info "Kolibri Hotspot active" && show_notify "Kolibri Hotspot active" && break
+		sleep 5
+	done
+	if [[ $NO_DAEMON ]]; then
+		check_connected 2>&1
+	else
+		check_connected 2>&1 &
+		disown
+	fi
+else
+	hostapd -B "$hotspotconfig" 2>&1 | show_debug
+	show_info "Kolibri Hotspot active"
+fi
+}
+
+
+stop() {
+
+# Kill process
+show_info "Stopping Kolibri Hotspot..." && show_notify "Kolibri Hotspot stopped"
+if [[ -f "$pidfile" ]]; then
+	pid=$(cat "$pidfile")
+	rm -f "$pidfile"
+	[[ $(grep -s "kolibri-hotspot" "/proc/$pid/cmdline") ]] && kill -9 "$pid"
+fi
+
+# Try to read the interface from the recorded file
+if [[ -f "$ifacefile" ]]; then
+	INTERFACE_WLAN=$(cat "$ifacefile")
+fi
+
+# If there was no recorded interface, try removing for the currently discovered interface
+if [[ ! $INTERFACE_WLAN ]]; then
+	configure
+fi
+
+# Delete interface record
+rm -f "$ifacefile"
+
+# Delete log
+rm -f "$logfile"
+
+# Shut down the services
+service hostapd stop 2>&1 | show_debug
+service dnsmasq stop 2>&1 | show_debug
+
+# Restart WiFi and disable newly created mon.WLAN network
+ifconfig "mon.$INTERFACE_WLAN" down 2>&1 | show_debug
+ifconfig "$INTERFACE_WLAN" down 2>&1 | show_debug
+ifconfig "$INTERFACE_WLAN" up 2>&1 | show_debug
+grep -q -F 'nameserver 8.8.8.8' /etc/resolv.conf || echo 'nameserver 8.8.8.8' >> /etc/resolv.conf
+service network-manager restart 2>&1 | show_debug
+
+}
+
+
+restart() {
+show_info "Restarting Kolibri Hotspot..."
+stop
+start
+}
+
+# check that the user is root
+check_root
+
+while true;
+do
+	case "$1" in
+		--no-daemon)
+				NO_DAEMON=1
+				shift;;
+		start)
+				start
+				shift
+				break;;
+		stop)
+				stop
+				shift
+				break;;
+		restart)
+				restart
+				shift
+				break;;
+		debug)
+				debug="true"
+				start
+				shift
+				break;;
+		--)
+				shift;;
+		*)
+				args=( "start" "stop" "restart" "debug" )
+				desc=( "start wireless hotspot" "stop wireless hotspot" "restart wireless hotspot" "start with detailed messages" )
+				echo -e "Usage:\tkolibri-hotspot [argument]\n"
+				for ((i=0; i < ${#args[@]}; i++)); do
+					printf "\t%-15s%-s\n" "${args[i]}" "${desc[i]}"
+				done
+				exit;;
+	esac
+done
+
+# show list of connected devices:
+#sudo iw dev wlan1 station dump

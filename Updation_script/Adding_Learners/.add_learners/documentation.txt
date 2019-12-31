@@ -1,0 +1,20 @@
+1. Always copy Adding learner script on Desktop.
+2. Adding learners folder contains 
+
+	--.add_learners which is hidden. You can access it through terminal.
+	--studentData.xlsx contains users which we want to import in the Kolibri system.
+	--upload_learners.sh calls add_user.py python file.
+
+3. To install this use below command :
+	pip3 install -r .add_learners/requirements.txt
+
+4. If you want to change the script, always edit add_user.py file.
+
+5. Now, Automation script opens Chrome browser if you want change it, you can change it in setup function.
+6. For Chrome, Copy chromedriver in /usr/bin
+
+7. While updating the script for new versions of the kolibri,
+	-1. Please inspect each and every element which are required while adding new user in the kolibri.
+	-2. Change the links of each and every element.
+	-3. It will work.
+	

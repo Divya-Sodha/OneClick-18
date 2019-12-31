@@ -1,0 +1,21 @@
+#!/bin/sh
+
+set -e
+
+var1=`awk -v val=1000 -F ":" '$3==val{print $1}' /etc/passwd`
+
+echo "$var1 ALL=(ALL) NOPASSWD:ALL" | tee -a /etc/sudoers
+
+mv /tmp/hotspot.desktop /home/$var1/Desktop/hotspot.desktop
+chmod 777 /home/$var1/Desktop/hotspot.desktop
+
+mv /tmp/internet.desktop /home/$var1/Desktop/internet.desktop
+chmod 777 /home/$var1/Desktop/internet.desktop
+
+echo "blacklist rt2800pci" >> /etc/modprobe.d/blacklist.conf
+
+#DEBHELPER#
+
+exit 0
+
+# vim: ts=2 sw=2
